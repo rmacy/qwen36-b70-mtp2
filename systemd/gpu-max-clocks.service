@@ -1,0 +1,12 @@
+[Unit]
+Description=Pin Intel Arc GPU frequency for inference latency
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -eu -c 'for f in /sys/class/drm/card*/device/tile*/gt*/freq0; do [ -e "$$f/min_freq" ] || continue; max=$$(cat "$$f/rp0_freq"); echo "$$max" > "$$f/max_freq"; echo "$$max" > "$$f/min_freq"; done'
+ExecStop=/bin/sh -eu -c 'for f in /sys/class/drm/card*/device/tile*/gt*/freq0; do [ -e "$$f/min_freq" ] || continue; min=$$(cat "$$f/rpn_freq"); max=$$(cat "$$f/rp0_freq"); echo "$$max" > "$$f/max_freq"; echo "$$min" > "$$f/min_freq"; done'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

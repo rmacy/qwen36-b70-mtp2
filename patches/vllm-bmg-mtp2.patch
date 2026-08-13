@@ -1,0 +1,198 @@
+--- a/vllm/model_executor/layers/logits_processor.py
++++ b/vllm/model_executor/layers/logits_processor.py
+@@ -154,7 +154,10 @@
+             # tiny [batch, 2] payload. Pad the native collective to avoid the
+             # broken eager-message path, then keep only the pair fields.
+             group = get_tp_group()
+-            gather_width = 64
++            # Keep a one-row request at the same proven 512-byte per-rank
++            # payload as the former two-row workaround, without doubling the
++            # expensive vocabulary-head matrix multiply.
++            gather_width = 128 if hidden_states.shape[0] == 1 else 64
+             gather_input = torch.zeros(
+                 (*local_pair.shape[:-1], gather_width),
+                 dtype=local_pair.dtype,
+--- a/vllm/model_executor/models/qwen3_5_mtp.py
++++ b/vllm/model_executor/models/qwen3_5_mtp.py
+@@ -124,12 +124,19 @@
+         self.fc = ColumnParallelLinear(
+             self.config.hidden_size * 2,
+             self.config.hidden_size,
+-            gather_output=True,
++            # This MTP projection's input and output are both replicated.  A
++            # sharded output therefore needs an all-gather on every draft step,
++            # and the compiled TP=2 path faults in oneCCL on dual BMG.  Keeping
++            # the small projection replicated removes that collective while
++            # preserving the exact full-weight operation on each rank.
++            gather_output=False,
+             bias=False,
+             return_bias=False,
+             quant_config=fc_quant,
+             prefix=f"{prefix}.fc",
++            disable_tp=True,
+         )
++        logger.info("Using a replicated Qwen3.5 MTP fc projection")
+ 
+         self.layers = torch.nn.ModuleList(
+             Qwen3_5DecoderLayer(
+--- a/vllm/v1/core/sched/async_scheduler.py
++++ b/vllm/v1/core/sched/async_scheduler.py
+@@ -1,6 +1,8 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+ 
++import os
++
+ from vllm.logger import init_logger
+ from vllm.v1.core.sched.output import SchedulerOutput
+ from vllm.v1.core.sched.scheduler import Scheduler
+@@ -14,6 +16,11 @@
+         super().__init__(*args, **kwargs)
+         # reusable read-only placeholder list for speculative decoding.
+         self._spec_token_placeholders: list[int] = [-1] * self.num_spec_tokens
++        self._mtp_max_prompt_tokens = int(
++            os.environ.get("QWEN_MTP_MAX_PROMPT_TOKENS", "8192")
++        )
++        spec_config = self.vllm_config.speculative_config
++        self._has_mtp = bool(spec_config is not None and spec_config.method == "mtp")
+ 
+     def _update_after_schedule(self, scheduler_output: SchedulerOutput) -> None:
+         super()._update_after_schedule(scheduler_output)
+@@ -34,9 +41,17 @@
+             request.num_output_placeholders += (
+                 self.num_sampled_tokens_per_step + cur_num_spec_tokens
+             )
+-            # Add placeholders for the new draft/spec tokens.
+-            # We will update the actual spec token ids in the worker process.
+-            request.spec_token_ids = self._spec_token_placeholders
++            mtp_disabled_for_request = (
++                self._has_mtp
++                and self._mtp_max_prompt_tokens > 0
++                and request.num_prompt_tokens > self._mtp_max_prompt_tokens
++            )
++            # Do not advertise speculative placeholders for guarded long
++            # requests. The worker uses the same threshold and skips MTP when
++            # an execution batch contains only guarded requests.
++            request.spec_token_ids = (
++                [] if mtp_disabled_for_request else self._spec_token_placeholders
++            )
+ 
+     def _update_request_with_output(
+         self, request: Request, new_token_ids: list[int]
+--- a/vllm/v1/spec_decode/llm_base_proposer.py
++++ b/vllm/v1/spec_decode/llm_base_proposer.py
+@@ -404,8 +404,9 @@
+ 
+     def _greedy_sample(self, hidden_states: torch.Tensor) -> torch.Tensor:
+         """Greedy-sample draft tokens from hidden states."""
+-        if self.use_local_argmax_reduction and hidden_states.shape[0] > 1:
+-            return self.model.get_top_tokens(hidden_states)
++        if self.use_local_argmax_reduction:
++            if hidden_states.shape[0] >= 1:
++                return self.model.get_top_tokens(hidden_states)
+         return self.model.compute_logits(hidden_states).argmax(dim=-1)
+ 
+     def propose(
+@@ -503,6 +504,16 @@
+             self.positions[:batch_size] = positions
+ 
+         draft_token_ids = self._greedy_sample(sample_hidden_states)
++        if self.method == "mtp" and getattr(self, "first_mtp_proposal", False):
++            # The first pass has now primed MTP's hybrid state. Preserve the
++            # configured fixed output width, but avoid two more serial draft
++            # forwards before the target's first token can be streamed. Reuse
++            # the first draft as low-confidence placeholders: target-model
++            # verification accepts only valid continuations, and the next
++            # proposal returns to the normal full-width MTP loop.
++            return draft_token_ids.view(-1, 1).repeat(
++                1, self.num_speculative_tokens
++            )
+ 
+         if self.allowed_attn_types is not None:
+             for group_md in per_group_attn_metadata:
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -4,6 +4,7 @@
+ import functools
+ import gc
+ import itertools
++import os
+ import threading
+ import time
+ from collections import defaultdict
+@@ -601,6 +602,9 @@
+         self.use_async_spec_decode = (
+             self.use_async_scheduling and self.num_spec_tokens > 0
+         )
++        self.mtp_max_prompt_tokens = int(
++            os.environ.get("QWEN_MTP_MAX_PROMPT_TOKENS", "8192")
++        )
+ 
+         # Request states.
+         self.requests: dict[str, CachedRequestState] = {}
+@@ -4262,9 +4266,37 @@
+         with record_function_or_nullcontext("gpu_model_runner: sample"):
+             sampler_output = self._sample(logits, spec_decode_metadata)
+ 
+-        self._update_states_after_model_execute(
+-            sampler_output.sampled_token_ids, scheduler_output
++        spec_config = self.speculative_config
++        skip_mtp_for_long_batch = (
++            spec_config is not None
++            and spec_config.method == "mtp"
++            and self.mtp_max_prompt_tokens > 0
++            and self.input_batch.num_reqs > 0
++            and all(
++                self.requests[req_id].num_prompt_tokens
++                > self.mtp_max_prompt_tokens
++                for req_id in self.input_batch.req_ids
++            )
++        )
++        newly_admitted_req_ids = {
++            req.req_id for req in scheduler_output.scheduled_new_reqs
++        }
++        first_mtp_proposal = (
++            spec_config is not None
++            and spec_config.method == "mtp"
++            and not skip_mtp_for_long_batch
++            and (
++                spec_decode_metadata is None
++                or any(req_id in newly_admitted_req_ids
++                       for req_id in self.input_batch.req_ids)
++                or any(not self.requests[req_id].output_token_ids
++                       for req_id in self.input_batch.req_ids)
++            )
+         )
++        if not skip_mtp_for_long_batch:
++            self._update_states_after_model_execute(
++                sampler_output.sampled_token_ids, scheduler_output
++            )
+         if self.use_async_scheduling:
+             pp = get_pp_group()
+             # For torchrun external_launcher PP mode with broadcast_pp_output=True,
+@@ -4283,6 +4315,10 @@
+         def propose_draft_token_ids(sampled_token_ids):
+             assert spec_decode_common_attn_metadata is not None
+             with record_function_or_nullcontext("gpu_model_runner: draft"):
++                if spec_config is not None and spec_config.method == "mtp":
++                    # Tell the proposer whether this is the first proposal for
++                    # every active request; do not infer from global buffers.
++                    self.drafter.first_mtp_proposal = first_mtp_proposal
+                 self._draft_token_ids = self.propose_draft_token_ids(
+                     scheduler_output,
+                     sampled_token_ids,
+@@ -4321,9 +4357,12 @@
+                     | Gemma4Proposer,
+                 )
+                 sampled_token_ids = sampler_output.sampled_token_ids
+-                if input_fits_in_drafter:
++                if input_fits_in_drafter and not skip_mtp_for_long_batch:
+                     propose_draft_token_ids(sampled_token_ids)
+-                elif self.valid_sampled_token_count_event is not None:
++                elif (
++                    not input_fits_in_drafter
++                    and self.valid_sampled_token_count_event is not None
++                ):
+                     assert spec_decode_common_attn_metadata is not None
+                     next_token_ids, valid_sampled_tokens_count = (
+                         self.drafter.prepare_next_token_ids_padded(

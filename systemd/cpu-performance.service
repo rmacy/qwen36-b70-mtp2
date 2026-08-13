@@ -1,0 +1,12 @@
+[Unit]
+Description=Pin CPU performance policy for inference latency
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -eu -c 'for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do [ -w "$$f" ] && echo performance > "$$f"; done; for f in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do [ -w "$$f" ] && echo performance > "$$f"; done'
+ExecStop=/bin/sh -eu -c 'for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do [ -w "$$f" ] && echo powersave > "$$f"; done; for f in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do [ -w "$$f" ] && echo balance_performance > "$$f"; done'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
