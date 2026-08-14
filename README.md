@@ -9,10 +9,11 @@ Read [SECURITY.md](SECURITY.md) before exposing the service. The image includes
 the upstream fix for CVE-2026-48746, backported because the pinned Intel vLLM
 revision predates vLLM 0.22.0.
 
-Prebuilt runtime image:
+Published runtime images:
 
 ```text
 ghcr.io/rmacy/qwen36-b70-mtp2:0.1.0
+us-central1-docker.pkg.dev/home-504803/open-models/qwen36-b70-mtp2:0.1.0
 ```
 
 ## Validated result
