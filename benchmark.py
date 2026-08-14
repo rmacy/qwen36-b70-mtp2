@@ -24,7 +24,7 @@ def api_url(endpoint: str) -> str:
 def unique_prompt(lane: str, sample: int) -> str:
     nonce = uuid.uuid4().hex
     return (
-        f"UNCACHED-NONCE {nonce} lane={lane} sample={sample}.\n"
+        f"{nonce} UNCACHED-NONCE lane={lane} sample={sample}.\n"
         "Write distinct, one-sentence financial control observations in plain text. "
         "Continue until the output limit and do not summarize."
     )
@@ -140,12 +140,12 @@ def main() -> None:
     stream_once(args.endpoint, args.model, args.api_key, "warmup", 0, 16, args.timeout)
     lanes = [run_lane(args, int(value)) for value in args.concurrency.split(",")]
     result = {
-        "version": "qwen36-bmg-mtp2-public-v1",
+        "version": "qwen36-bmg-mtp2-public-v1.1",
         "finished_at": datetime.now(UTC).isoformat(),
         "endpoint": args.endpoint,
         "model": args.model,
         "contract": {
-            "cache_resistant_nonce_first": True,
+            "cache_resistant_nonce_first_block": True,
             "sampling": {
                 "temperature": 0.7,
                 "top_p": 0.8,

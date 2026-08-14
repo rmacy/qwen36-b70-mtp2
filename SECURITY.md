@@ -1,8 +1,9 @@
 # Security
 
-The supplied `run.sh` binds the API to `127.0.0.1` by default. Put an
-authenticated gateway in front of it if remote clients need access. Do not
-publish port 8000 directly to an untrusted network.
+The supplied `run.sh` binds the API to `127.0.0.1` by default. Set `API_KEY` to
+enable vLLM's bearer-token authentication, and put an authenticated gateway in
+front of the service if remote clients need access. Do not publish port 8000
+directly to an untrusted network.
 
 ## CVE-2026-48746 backport
 

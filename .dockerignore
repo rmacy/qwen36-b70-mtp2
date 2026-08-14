@@ -1,7 +1,7 @@
-.git
-.gitignore
-.vllm-cache
-__pycache__
-*.pyc
-*.json
-*.tar.gz
+*
+!Dockerfile
+!launch.sh
+!patches/
+!patches/*.patch
+!tests/
+!tests/*.py

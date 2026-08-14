@@ -12,8 +12,8 @@ revision predates vLLM 0.22.0.
 Published runtime images:
 
 ```text
-ghcr.io/rmacy/qwen36-b70-mtp2:0.1.0
-us-central1-docker.pkg.dev/home-504803/open-models/qwen36-b70-mtp2:0.1.0
+ghcr.io/rmacy/qwen36-b70-mtp2:0.1.1
+us-central1-docker.pkg.dev/home-504803/open-models/qwen36-b70-mtp2:0.1.1
 ```
 
 ## Validated result
@@ -23,7 +23,8 @@ us-central1-docker.pkg.dev/home-504803/open-models/qwen36-b70-mtp2:0.1.0
 - Model: official `Qwen/Qwen3.6-27B-FP8` checkpoint.
 - C1 decode: 52.94 tok/s median, versus 31.90 without MTP.
 - Cold aggregate: 169.48-175.94 tok/s at C4; 267.37-282.57 at C8.
-- Quality: exact tie with a separately hosted copy of the same FP8 checkpoint.
+- Quality: tied the separately hosted copy on the frozen score and all 82
+  blinded response comparisons.
 - Stability: 6,981/6,981 correct requests in a 3,604-second mixed soak.
 
 The tested host used Linux 7.0, Intel compute runtime `26.05.37020.3`, Level
@@ -59,17 +60,17 @@ checkpoint revision is `e89b16ebf1988b3d6befa7de50abc2d76f26eb09`.
 Use the prebuilt image:
 
 ```bash
-docker pull ghcr.io/rmacy/qwen36-b70-mtp2:0.1.0
+docker pull ghcr.io/rmacy/qwen36-b70-mtp2:0.1.1
 
 MODEL_DIR=/absolute/path/to/Qwen3.6-27B-FP8 \
-IMAGE=ghcr.io/rmacy/qwen36-b70-mtp2:0.1.0 \
+IMAGE=ghcr.io/rmacy/qwen36-b70-mtp2:0.1.1 \
   ./run.sh
 ```
 
 Or build the exact image from source:
 
 ```bash
-docker build -t qwen36-bmg-mtp2:0.1.0 .
+docker build -t qwen36-bmg-mtp2:0.1.1 .
 
 MODEL_DIR=/absolute/path/to/Qwen3.6-27B-FP8 \
   ./run.sh
@@ -85,6 +86,7 @@ Important overrides:
 PORT=8001 GPU_UTIL=0.84 MAX_MODEL_LEN=131072 ./run.sh
 MTP_TOKENS=0 ./run.sh                    # matched no-MTP control
 MTP_MAX_PROMPT_TOKENS=0 ./run.sh         # no long-prompt bypass
+API_KEY='replace-with-a-long-random-value' ./run.sh
 ```
 
 The selected defaults are MTP2, local argmax reduction, an 8,192-token MTP
@@ -101,10 +103,11 @@ python3 benchmark.py \
   --output results.json
 ```
 
-The nonce is the first prompt token, so automatic prefix caching cannot turn a
-cold test into a cached one. Report TTFT, isolated C1 decode, and aggregate
-concurrency separately. Do not compare this number with a benchmark that uses
-different output length, sampling, context, quantization, cache state, or MTP.
+The unique nonce is in the first prompt block, so automatic prefix caching
+cannot turn a cold test into a cached one. Report TTFT, isolated C1 decode, and
+aggregate concurrency separately. Do not compare this number with a benchmark
+that uses different output length, sampling, context, quantization, cache state,
+or MTP.
 
 Before production use, run your own deterministic quality suite and at least a
 one-hour mixed-concurrency soak. The included benchmark measures performance;
