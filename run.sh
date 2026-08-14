@@ -3,7 +3,7 @@ set -euo pipefail
 
 : "${MODEL_DIR:?Set MODEL_DIR to the absolute host path of Qwen3.6-27B-FP8}"
 
-IMAGE="${IMAGE:-qwen36-bmg-mtp2:0.1.1}"
+IMAGE="${IMAGE:-qwen36-bmg-mtp2:0.1.2}"
 CONTAINER="${CONTAINER:-qwen36-bmg-mtp2}"
 PORT="${PORT:-8000}"
 CACHE_DIR="${CACHE_DIR:-${PWD}/.vllm-cache}"

@@ -1,6 +1,15 @@
 ARG BASE_IMAGE=intel/llm-scaler-vllm@sha256:7a526dcfc49c77afeabf77e2e2a41a9a0221126580d144d2d1a15e320befb210
 FROM ${BASE_IMAGE}
 
+# Keep the Intel runtime pinned while replacing the vulnerable userspace Linux
+# headers inherited from that image. This package does not change the running
+# kernel or the XPU driver stack.
+ARG LINUX_LIBC_DEV_VERSION=6.8.0-137.137
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --only-upgrade \
+      "linux-libc-dev=${LINUX_LIBC_DEV_VERSION}" \
+    && rm -rf /var/lib/apt/lists/*
+
 LABEL org.opencontainers.image.source="https://github.com/rmacy/qwen36-b70-mtp2" \
       org.opencontainers.image.title="Qwen3.6-27B MTP2 for dual Intel BMG" \
       org.opencontainers.image.description="Version-pinned Intel XPU vLLM runtime with the validated dual-BMG MTP2 patch" \

@@ -28,15 +28,14 @@ repository and runtime contain no Qwen checkpoint weights; one small
 `compressed_tensors` Hadamard-transform data file is inherited from the base
 Python environment.
 
-The pinned Intel base also contains operating-system and language packages with
-published advisories. Some critical Ubuntu matches are attached to the
-`linux-libc-dev` header package; containers use the host kernel and do not run a
-kernel from that package. This does not make all inherited findings irrelevant.
-The initial 2026-08-13 Trivy scan reported 18 critical and 228 high matches:
-16 critical matches were in `linux-libc-dev`, and two were the version-matched
-vLLM authentication CVE whose backport is documented and regression-tested
-above. Keep the endpoint private, review current scan output, and rebase onto a
-newer Intel image when the XPU/MTP patch set has been revalidated there.
+Release 0.1.2 pins Ubuntu's fixed `linux-libc-dev` 6.8.0-137.137 package on top
+of the Intel base. A Trivy 0.73.0 scan of the clean release candidate on
+2026-08-13 found zero secrets, two critical matches, and 68 high matches. Both
+critical matches are duplicate version-based detections of CVE-2026-48746; the
+backport and exploit regression test are documented above. The image still
+contains inherited packages with published high-severity advisories. Keep the
+endpoint private, review current scan output, and rebase onto a newer Intel
+image when the XPU/MTP patch set has been revalidated there.
 
 Report a suspected vulnerability privately to the repository owner through
 GitHub's private vulnerability reporting feature. Do not include real API

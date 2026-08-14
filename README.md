@@ -12,8 +12,8 @@ revision predates vLLM 0.22.0.
 Published runtime images:
 
 ```text
-ghcr.io/rmacy/qwen36-b70-mtp2:0.1.1
-us-central1-docker.pkg.dev/home-504803/open-models/qwen36-b70-mtp2:0.1.1
+ghcr.io/rmacy/qwen36-b70-mtp2:0.1.2
+us-central1-docker.pkg.dev/home-504803/open-models/qwen36-b70-mtp2:0.1.2
 ```
 
 ## Validated result
@@ -60,17 +60,17 @@ checkpoint revision is `e89b16ebf1988b3d6befa7de50abc2d76f26eb09`.
 Use the prebuilt image:
 
 ```bash
-docker pull ghcr.io/rmacy/qwen36-b70-mtp2:0.1.1
+docker pull ghcr.io/rmacy/qwen36-b70-mtp2:0.1.2
 
 MODEL_DIR=/absolute/path/to/Qwen3.6-27B-FP8 \
-IMAGE=ghcr.io/rmacy/qwen36-b70-mtp2:0.1.1 \
+IMAGE=ghcr.io/rmacy/qwen36-b70-mtp2:0.1.2 \
   ./run.sh
 ```
 
 Or build the exact image from source:
 
 ```bash
-docker build -t qwen36-bmg-mtp2:0.1.1 .
+docker build -t qwen36-bmg-mtp2:0.1.2 .
 
 MODEL_DIR=/absolute/path/to/Qwen3.6-27B-FP8 \
   ./run.sh
