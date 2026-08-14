@@ -12,8 +12,8 @@ revision predates vLLM 0.22.0.
 Published runtime images:
 
 ```text
-ghcr.io/rmacy/qwen36-b70-mtp2:0.1.2
-us-central1-docker.pkg.dev/home-504803/open-models/qwen36-b70-mtp2:0.1.2
+ghcr.io/rmacy/qwen36-b70-mtp2:0.1.3
+us-central1-docker.pkg.dev/home-504803/open-models/qwen36-b70-mtp2:0.1.3
 ```
 
 ## Validated result
@@ -60,17 +60,17 @@ checkpoint revision is `e89b16ebf1988b3d6befa7de50abc2d76f26eb09`.
 Use the prebuilt image:
 
 ```bash
-docker pull ghcr.io/rmacy/qwen36-b70-mtp2:0.1.2
+docker pull ghcr.io/rmacy/qwen36-b70-mtp2:0.1.3
 
 MODEL_DIR=/absolute/path/to/Qwen3.6-27B-FP8 \
-IMAGE=ghcr.io/rmacy/qwen36-b70-mtp2:0.1.2 \
+IMAGE=ghcr.io/rmacy/qwen36-b70-mtp2:0.1.3 \
   ./run.sh
 ```
 
 Or build the exact image from source:
 
 ```bash
-docker build -t qwen36-bmg-mtp2:0.1.2 .
+docker build -t qwen36-bmg-mtp2:0.1.3 .
 
 MODEL_DIR=/absolute/path/to/Qwen3.6-27B-FP8 \
   ./run.sh
@@ -129,17 +129,15 @@ sudo systemctl enable --now cpu-performance.service gpu-max-clocks.service
 sudo systemctl disable --now cpu-performance.service gpu-max-clocks.service
 ```
 
-## Publishing or upstreaming
+## Upstreaming
 
-This directory is ready to become its own Git repository. A sensible next step
-is:
+When contributing these changes upstream:
 
-1. publish the reproduction kit and exact measurement contract;
-2. open separate, small upstream issues or pull requests for the replicated MTP
+1. open separate, small issues or pull requests for the replicated MTP
    projection, XPU local argmax, and prompt-length guard;
-3. include correctness tests for every patch and disclose that the first-token
+2. include correctness tests for every patch and disclose that the first-token
    optimization is BMG/oneCCL-motivated;
-4. rebase against the current upstream vLLM revision instead of loosening the
+3. rebase against the current upstream vLLM revision instead of loosening the
    Docker pin.
 
 The repository redistributes no model checkpoint weights. The prebuilt image
